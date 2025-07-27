@@ -54,7 +54,7 @@
     cd backend
     pip install -r requirements.txt
 
-    # Frontend (si corresponde)
+    # Frontend
     cd ../frontend
     npm install
     ```
@@ -67,7 +67,7 @@
     # Backend
     python app.py
 
-    # Frontend (opcional)
+    # Frontend
     npm run dev
     ```
 
