@@ -1,0 +1,11 @@
+flask
+flask_sqlalchemy
+pymysql
+python-dotenv
+flask-cors
+pyjwt
+werkzeug
+reportlab
+cryptography
+flask-jwt-extended
+pytz

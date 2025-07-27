@@ -1,0 +1,76 @@
+from flask import Blueprint, jsonify, request
+import crud
+from auth_utils import admin_required
+from sqlalchemy import or_
+from models import Product
+
+products_bp = Blueprint('products', __name__, url_prefix='/products')
+
+@products_bp.route('/', methods=['GET'])
+def get_products():
+    search = request.args.get("search")
+    category = request.args.get("category")
+    brand = request.args.get("brand")
+    sortBy = request.args.get("sortBy")
+    
+    query = Product.query.filter_by(is_active=True)
+    if search:
+        like_str = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                Product.name.ilike(like_str),
+                Product.description.ilike(like_str),
+                Product.long_description.ilike(like_str)
+            )
+        )
+    if category and category != "all":
+        query = query.filter_by(category_id=category)
+    if brand and brand != "all":
+        query = query.filter(Product.brand == brand)
+    
+    # Ordenamiento
+    if sortBy == "name":
+        query = query.order_by(Product.name.asc())
+    elif sortBy == "price_asc":
+        query = query.order_by(Product.price.asc())
+    elif sortBy == "price_desc":
+        query = query.order_by(Product.price.desc())
+    elif sortBy == "stock":
+        query = query.order_by(Product.stock.desc())
+    else:
+        query = query.order_by(Product.created_at.desc())
+
+    productos = query.all()
+    return jsonify([p.to_dict() for p in productos])
+
+
+@products_bp.route('/<product_id>', methods=['GET'])
+def get_product(product_id):
+    product = crud.get_product_by_id(product_id)
+    return (jsonify(product.to_dict()), 200) if product else ('', 404)
+
+@products_bp.route('/', methods=['POST'])
+@admin_required
+def add_product():
+    data = request.json
+    # Validar que el stock no sea negativo
+    if 'stock' in data and data['stock'] < 0:
+        return jsonify({"message": "El stock no puede ser negativo."}), 400
+    product = crud.create_product(data)
+    return jsonify(product.to_dict()), 201
+
+@products_bp.route('/<product_id>', methods=['PUT'])
+@admin_required
+def update_product(product_id):
+    data = request.json
+    # Validar que el stock no sea negativo
+    if 'stock' in data and data['stock'] < 0:
+        return jsonify({"message": "El stock no puede ser negativo."}), 400
+    product = crud.update_product(product_id, data)
+    return (jsonify(product.to_dict()), 200) if product else ('', 404)
+
+@products_bp.route('/<product_id>', methods=['DELETE'])
+@admin_required
+def delete_product(product_id):
+    product = crud.delete_product(product_id)
+    return ('', 204) if product else ('', 404)
