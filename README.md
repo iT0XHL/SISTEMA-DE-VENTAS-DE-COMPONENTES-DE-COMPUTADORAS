@@ -77,9 +77,10 @@
 
 ## 📝 Notas Importantes
 
-- Las compras, órdenes y boletas solo pueden generarse si el usuario está registrado e inició sesión.
+- La base de datos por el momento solo funciona de manera local.
 - Los archivos necesarios para generar la base de datos se encuentran en la carpeta database.
-- El panel de administración solo es accesible para cuentas con rol de **administrador**.
+- Las compras, órdenes y boletas solo pueden generarse si el usuario está registrado e inició sesión.
+- El panel de administración solo es accesible para cuentas con rol de **admin**.
 
 ---
 
