@@ -39,6 +39,8 @@
 
 ## 🚀 Instalación Rápida
 
+   > Previamente debes tener instalado Node.js, MySQL y una versión de Python estable y compatible con múltiples paquetes, por ejemplo, Python 3.12.10.
+
 1. **Clona este repositorio:**
     ```bash
     git clone https://github.com/iT0XHL/SISTEMA-DE-VENTAS-DE-COMPONENTES-DE-COMPUTADORAS.git
@@ -46,7 +48,7 @@
     ```
 
 2. **Configura tus variables de entorno (.env) para el backend**  
-   > No subas este archivo al repositorio por seguridad.
+   > Al configurarlas tú mismo, no subas ese archivo al repositorio por seguridad.
 
 3. **Instala dependencias:**
     ```bash
