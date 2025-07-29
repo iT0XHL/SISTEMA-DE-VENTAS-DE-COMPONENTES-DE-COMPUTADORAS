@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { productsApi, categoriesApi } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
-import { Plus, Edit, Trash2, Package } from "lucide-react"
+import { Plus, Edit, Trash2, Package, XCircle } from "lucide-react"
 import Image from "next/image"
 import type { Product, Category } from "@/lib/types"
 
@@ -38,26 +38,26 @@ const initialFormState = {
   weight: "",
   dimensions: "",
   warranty_months: "",
-};
-
-// Función para parsear especificaciones "clave: valor, clave2: valor2"
-function parseSpecs(str: string) {
-  const obj: Record<string, any> = {};
-  str.split(",").forEach((item) => {
-    const [key, value] = item.split(":").map((s) => s.trim());
-    if (key) obj[key] = value ?? true;
-  });
-  return obj;
 }
 
-// Función para parsear características "Bluetooth, RGB"
-function parseFeatures(str: string) {
-  const obj: Record<string, boolean> = {};
+// Parsear especificaciones "clave: valor, clave2: valor2"
+function parseSpecs(str: string) {
+  const obj: Record<string, any> = {}
   str.split(",").forEach((item) => {
-    const key = item.trim();
-    if (key) obj[key] = true;
-  });
-  return obj;
+    const [key, value] = item.split(":").map((s) => s.trim())
+    if (key) obj[key] = value ?? true
+  })
+  return obj
+}
+
+// Parsear características "Bluetooth, RGB"
+function parseFeatures(str: string) {
+  const obj: Record<string, boolean> = {}
+  str.split(",").forEach((item) => {
+    const key = item.trim()
+    if (key) obj[key] = true
+  })
+  return obj
 }
 
 export default function AdminProductsPage() {
@@ -65,29 +65,52 @@ export default function AdminProductsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [brands, setBrands] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-
   const [formData, setFormData] = useState({ ...initialFormState })
 
+  // Filtros y búsqueda
+  const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [brandFilter, setBrandFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all") // <-- Añadido filtro de estado
+
+  // Obtener categorías y marcas una sola vez al cargar (solo si eres admin)
   useEffect(() => {
     if (!user || user.role !== "admin") {
       router.push("/")
       return
     }
-    fetchProducts()
     fetchCategories()
+    fetchBrands()
     // eslint-disable-next-line
   }, [user, router])
 
+  // Obtener productos cada vez que cambie la búsqueda o los filtros
+  useEffect(() => {
+    if (!user || user.role !== "admin") return
+    fetchProducts()
+    // eslint-disable-next-line
+  }, [search, categoryFilter, brandFilter, statusFilter]) // <-- Añadido statusFilter
+
+  // --- FUNCIONES FETCH ---
   const fetchProducts = async () => {
     setLoading(true)
     try {
-      const data = await productsApi.getAll({})
+      const filters: any = {}
+      if (search) filters.search = search
+      if (categoryFilter !== "all") filters.category = categoryFilter
+      if (brandFilter !== "all") filters.brand = brandFilter
+      if (statusFilter !== "all") {
+        filters.is_active = statusFilter === "active" ? "true" : "false" // <-- Añadido
+      }
+      const data = await productsApi.getAll(filters)
       setProducts(data)
     } catch (error) {
       console.error("Error fetching products:", error)
+      setProducts([])
     } finally {
       setLoading(false)
     }
@@ -102,6 +125,17 @@ export default function AdminProductsPage() {
     }
   }
 
+  const fetchBrands = async () => {
+    try {
+      const data = await productsApi.getBrands()
+      setBrands(data)
+    } catch (error) {
+      console.error("Error fetching brands:", error)
+      setBrands([])
+    }
+  }
+
+  // --- HANDLERS FORM ---
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -184,6 +218,7 @@ export default function AdminProductsPage() {
       setDialogOpen(false)
       resetForm()
       fetchProducts()
+      fetchBrands() // Opcional: refresca marcas al crear/editar producto
     } catch (error) {
       toast({
         title: "Error",
@@ -202,6 +237,7 @@ export default function AdminProductsPage() {
       await productsApi.delete(productId)
       toast({ title: "Producto eliminado correctamente" })
       fetchProducts()
+      fetchBrands() // Opcional: refresca marcas al borrar producto
     } catch (error) {
       toast({
         title: "Error",
@@ -211,9 +247,20 @@ export default function AdminProductsPage() {
     }
   }
 
+  // --- BOTÓN LIMPIAR FILTROS ---
+  const clearFilters = () => {
+    setSearch("")
+    setCategoryFilter("all")
+    setBrandFilter("all")
+    setStatusFilter("all") // <-- Añadido
+  }
+
   if (!user || user.role !== "admin") {
     return null
   }
+
+  // Opciones de marcas (únicas) a partir de productos cargados
+  const uniqueBrands = Array.from(new Set(products.map(p => p.brand).filter(Boolean) as string[]))
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -235,6 +282,7 @@ export default function AdminProductsPage() {
               <DialogTitle>{editingProduct ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* TODO: el form original va aquí, lo dejé igual */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="product_code">Código del Producto</Label>
@@ -255,7 +303,6 @@ export default function AdminProductsPage() {
                   />
                 </div>
               </div>
-
               <div>
                 <Label htmlFor="description">Descripción</Label>
                 <Textarea
@@ -265,7 +312,6 @@ export default function AdminProductsPage() {
                   rows={2}
                 />
               </div>
-
               <div>
                 <Label htmlFor="long_description">Descripción Larga</Label>
                 <Textarea
@@ -275,7 +321,6 @@ export default function AdminProductsPage() {
                   rows={2}
                 />
               </div>
-
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="price">Precio (S/)</Label>
@@ -308,7 +353,6 @@ export default function AdminProductsPage() {
                   />
                 </div>
               </div>
-
               <div>
                 <Label htmlFor="category">Categoría</Label>
                 <Select
@@ -327,7 +371,6 @@ export default function AdminProductsPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="brand">Marca</Label>
@@ -346,7 +389,6 @@ export default function AdminProductsPage() {
                   />
                 </div>
               </div>
-
               <div>
                 <Label htmlFor="image_url">URL de Imagen Principal</Label>
                 <Input
@@ -356,7 +398,6 @@ export default function AdminProductsPage() {
                   placeholder="https://ejemplo.com/imagen.jpg"
                 />
               </div>
-
               <div>
                 <Label htmlFor="image_urls">URLs de Imágenes adicionales (separadas por coma)</Label>
                 <Input
@@ -366,7 +407,6 @@ export default function AdminProductsPage() {
                   placeholder="https://a.jpg, https://b.jpg"
                 />
               </div>
-
               <div>
                 <Label htmlFor="specifications">
                   Especificaciones (ejemplo: color: negro, velocidad: 3.4GHz, memoria: 16GB)
@@ -378,7 +418,6 @@ export default function AdminProductsPage() {
                   placeholder="color: negro, velocidad: 3.4GHz, memoria: 16GB"
                 />
               </div>
-
               <div>
                 <Label htmlFor="features">
                   Características (ejemplo: Bluetooth, RGB, Overclock)
@@ -390,7 +429,6 @@ export default function AdminProductsPage() {
                   placeholder="Bluetooth, RGB, Overclock"
                 />
               </div>
-
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="weight">Peso (kg)</Label>
@@ -420,7 +458,6 @@ export default function AdminProductsPage() {
                   />
                 </div>
               </div>
-
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -430,7 +467,6 @@ export default function AdminProductsPage() {
                 />
                 <Label htmlFor="is_active">Producto activo</Label>
               </div>
-
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancelar
@@ -442,7 +478,54 @@ export default function AdminProductsPage() {
         </Dialog>
       </div>
 
-      {/* Products Table */}
+      {/* Barra de búsqueda y filtros */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        <input
+          type="text"
+          className="border rounded px-3 py-2 text-sm w-56"
+          placeholder="Buscar por nombre o código..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <select
+          className="border rounded px-2 py-2 text-sm"
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+        >
+          <option value="all">Todas las categorías</option>
+          {categories.map(cat => (
+            <option key={cat.id} value={cat.id}>{cat.name}</option>
+          ))}
+        </select>
+        <select
+          className="border rounded px-2 py-2 text-sm"
+          value={brandFilter}
+          onChange={e => setBrandFilter(e.target.value)}
+        >
+          <option value="all">Todas las marcas</option>
+          {brands.map(brand => (
+            <option key={brand} value={brand}>{brand}</option>
+          ))}
+        </select>
+        <select
+          className="border rounded px-2 py-2 text-sm"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+        >
+          <option value="all">Todos</option>
+          <option value="active">Solo activos</option>
+          <option value="inactive">Solo inactivos</option>
+        </select>
+        <Button
+          variant="ghost"
+          className="text-gray-600 px-2"
+          title="Limpiar filtros"
+          onClick={clearFilters}
+        >
+          <XCircle className="h-5 w-5 mr-1" /> Limpiar
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">

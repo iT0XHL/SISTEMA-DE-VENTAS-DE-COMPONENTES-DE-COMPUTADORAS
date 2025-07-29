@@ -1,6 +1,7 @@
 from models import db, User, Category, Product, Cart, CartItem, Order, OrderItem, Invoice
 from datetime import datetime
 from werkzeug.security import generate_password_hash
+from sqlalchemy import or_
 import uuid
 import random
 import string
@@ -256,8 +257,47 @@ def add_product_to_cart(user_id, product_id, quantity):
     return item
 
 # ----------------------- ORDERS --------------------------
-def get_all_orders():
-    return Order.query.all()
+def get_all_orders(search=None, status=None, payment_method=None, date_from=None, date_to=None):
+    # Empieza el query
+    query = Order.query
+
+    # Join con usuario para buscar nombre/email si search está definido
+    if search:
+        search = search.strip().lower()
+        query = query.join(User, Order.user_id == User.id)
+        like_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Order.order_number.ilike(like_pattern),
+                User.full_name.ilike(like_pattern),
+                User.email.ilike(like_pattern),
+            )
+        )
+    # Filtro por status
+    if status:
+        query = query.filter(Order.status == status)
+    # Filtro por payment_method
+    if payment_method:
+        query = query.filter(Order.payment_method == payment_method)
+    # Filtro por fecha de inicio
+    if date_from:
+        try:
+            date_from_dt = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(Order.created_at >= date_from_dt)
+        except Exception:
+            pass
+    # Filtro por fecha de fin
+    if date_to:
+        try:
+            date_to_dt = datetime.strptime(date_to, "%Y-%m-%d")
+            # Incluye todo ese día hasta las 23:59:59
+            date_to_dt = date_to_dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(Order.created_at <= date_to_dt)
+        except Exception:
+            pass
+
+    query = query.order_by(Order.created_at.desc())
+    return query.all()
 
 def get_order_by_id(order_id):
     return Order.query.get(order_id)

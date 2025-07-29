@@ -14,17 +14,22 @@ import type { Order, OrderItem, User } from "@/lib/types"
 
 const API_URL = "http://localhost:5000"
 
-// Opciones de estado con label en español y valor en inglés (que es el de la BD)
 const STATUS_OPTIONS = [
+  { value: "", label: "Todos" },
   { value: "pending", label: "Pendiente" },
   { value: "paid", label: "Pagado" },
   { value: "shipped", label: "Enviado" },
   { value: "delivered", label: "Entregado" },
   { value: "cancelled", label: "Cancelado" },
-  { value: "annulled", label: "Anulado" }, 
+  { value: "annulled", label: "Anulado" },
 ]
-
-// Traducción status inglés → español para mostrar
+const PAYMENT_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "credit_card", label: "Tarjeta de Crédito" },
+  { value: "debit_card", label: "Tarjeta de Débito" },
+  { value: "bank_transfer", label: "Transferencia Bancaria" },
+  { value: "cash_on_delivery", label: "Efectivo" },
+]
 const statusLabels: Record<string, string> = {
   pending: "Pendiente",
   paid: "Pagado",
@@ -33,8 +38,6 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelado",
   annulled: "Anulado",
 }
-
-// Traducción método de pago inglés → español
 const paymentMethodLabels: Record<string, string> = {
   credit_card: "Tarjeta de Crédito",
   debit_card: "Tarjeta de Débito",
@@ -55,6 +58,13 @@ export default function AdminOrdersPage() {
   const [statusSaving, setStatusSaving] = useState(false)
   const [invoiceLoading, setInvoiceLoading] = useState(false)
 
+  // Filtros de búsqueda y filtrado
+  const [search, setSearch] = useState("")
+  const [status, setStatus] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+
   // Traducción de método de pago (si hay uno nuevo, muestra tal cual)
   const getPaymentMethodText = (method?: string) =>
     paymentMethodLabels[method || ""] || method || "-"
@@ -73,10 +83,23 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, router])
 
+  // Refetch cuando cambia algún filtro
+  useEffect(() => {
+    if (!user || user.role !== "admin") return
+    fetchOrders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, status, paymentMethod, dateFrom, dateTo])
+
   const fetchOrders = async () => {
     setLoading(true)
     try {
-      const data = await ordersApi.getAll()
+      const filters: any = {}
+      if (search.trim()) filters.search = search.trim()
+      if (status) filters.status = status
+      if (paymentMethod) filters.payment_method = paymentMethod
+      if (dateFrom) filters.date_from = dateFrom
+      if (dateTo) filters.date_to = dateTo
+      const data = await ordersApi.getAll(filters)
       setOrders(
         data.sort(
           (a: Order, b: Order) =>
@@ -177,6 +200,62 @@ export default function AdminOrdersPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Gestión de Pedidos</h1>
         <p className="text-gray-600 mt-2">Administra todos los pedidos de la tienda</p>
+      </div>
+
+      {/* FILTROS AVANZADOS Y BUSCADOR */}
+      <div className="mb-4 flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          className="border rounded px-3 py-2 text-sm w-72"
+          placeholder="Buscar por N° pedido, nombre o email..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <select
+          className="border rounded px-3 py-2 text-sm"
+          value={status}
+          onChange={e => setStatus(e.target.value)}
+        >
+          {STATUS_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <select
+          className="border rounded px-3 py-2 text-sm"
+          value={paymentMethod}
+          onChange={e => setPaymentMethod(e.target.value)}
+        >
+          {PAYMENT_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <label className="text-xs text-gray-600 ml-2">Desde</label>
+        <input
+          type="date"
+          className="border rounded px-2 py-2 text-sm"
+          value={dateFrom}
+          onChange={e => setDateFrom(e.target.value)}
+          max={dateTo || undefined}
+        />
+        <label className="text-xs text-gray-600 ml-2">Hasta</label>
+        <input
+          type="date"
+          className="border rounded px-2 py-2 text-sm"
+          value={dateTo}
+          onChange={e => setDateTo(e.target.value)}
+          min={dateFrom || undefined}
+        />
+        <Button
+          variant="ghost"
+          className="text-xs px-2 py-2 ml-2"
+          onClick={() => {
+            setSearch("")
+            setStatus("")
+            setPaymentMethod("")
+            setDateFrom("")
+            setDateTo("")
+          }}
+        >Limpiar</Button>
       </div>
 
       <Card>
@@ -354,7 +433,7 @@ export default function AdminOrdersPage() {
                                       value={editingStatus}
                                       onChange={e => setEditingStatus(e.target.value)}
                                     >
-                                      {STATUS_OPTIONS.map(opt => (
+                                      {STATUS_OPTIONS.filter(opt => !!opt.value).map(opt => (
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                                       ))}
                                     </select>

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Table, TableHead, TableRow, TableCell, TableBody } from "@/components/ui/table"
 import { UserIcon, AtSign, ShieldCheck, Trash2 } from "lucide-react"
 import { usersApi } from "@/lib/api"
 import type { User } from "@/lib/types"
@@ -14,6 +13,10 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+
+  // Barra de búsqueda y filtro
+  const [search, setSearch] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
 
   async function fetchUsers() {
     setLoading(true)
@@ -44,6 +47,15 @@ export default function UsersPage() {
     setTimeout(() => setMsg(null), 2000)
   }
 
+  // Filtrado local
+  const filteredUsers = users.filter(u => {
+    const matchesSearch =
+      u.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase())
+    const matchesRole = roleFilter === "all" || u.role === roleFilter
+    return matchesSearch && matchesRole
+  })
+
   return (
     <div className="max-w-6xl mx-auto py-10 px-2 sm:px-4">
       <Card className="shadow-md border-none bg-white">
@@ -53,6 +65,24 @@ export default function UsersPage() {
             Gestión de Usuarios
           </CardTitle>
           <p className="text-gray-500 text-base mt-2">Vista de usuarios registrados.</p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <input
+              type="text"
+              className="border rounded px-3 py-2 text-sm w-60"
+              placeholder="Buscar usuario o email..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <select
+              className="border rounded px-2 py-2 text-sm"
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value)}
+            >
+              <option value="all">Todos los roles</option>
+              <option value="admin">Admin</option>
+              <option value="customer">Cliente</option>
+            </select>
+          </div>
         </CardHeader>
         <CardContent>
           {msg && (
@@ -60,8 +90,8 @@ export default function UsersPage() {
           )}
           {loading ? (
             <div className="text-center py-16 text-lg animate-pulse">Cargando usuarios...</div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-16">No hay usuarios registrados.</div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="text-center py-16">No hay usuarios encontrados.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full border-separate border-spacing-y-2">
@@ -85,7 +115,7 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {filteredUsers.map((u) => (
                     <tr
                       key={u.id}
                       className="bg-white/70 hover:bg-violet-50/80 transition-colors duration-200 border-b border-gray-100 shadow-sm rounded-lg group"

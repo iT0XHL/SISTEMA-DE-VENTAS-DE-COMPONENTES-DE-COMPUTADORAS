@@ -31,6 +31,7 @@ export default function AdminCategoriesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [formData, setFormData] = useState({ ...initialFormState })
+  const [search, setSearch] = useState("")
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -119,6 +120,12 @@ export default function AdminCategoriesPage() {
     }
   }
 
+  // FILTRADO POR BÚSQUEDA (nombre o descripción)
+  const filteredCategories = categories.filter(cat =>
+    (cat.name || "").toLowerCase().includes(search.trim().toLowerCase()) ||
+    (cat.description || "").toLowerCase().includes(search.trim().toLowerCase())
+  )
+
   if (!user || user.role !== "admin") {
     return null
   }
@@ -192,6 +199,17 @@ export default function AdminCategoriesPage() {
         </Dialog>
       </div>
 
+      {/* Barra de búsqueda */}
+      <div className="mb-4 flex">
+        <input
+          type="text"
+          className="border rounded px-3 py-2 text-sm w-72"
+          placeholder="Buscar categoría por nombre o descripción..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
@@ -214,7 +232,7 @@ export default function AdminCategoriesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {categories.map((category) => (
+                {filteredCategories.map((category) => (
                   <TableRow key={category.id}>
                     <TableCell className="font-medium">{category.name}</TableCell>
                     <TableCell>{category.description}</TableCell>

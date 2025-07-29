@@ -49,7 +49,7 @@ export const productsApi = {
     if (!res.ok) throw new Error("Error al obtener producto")
     return res.json()
   },
-
+  
   async create(product: ProductCreate): Promise<Product> {
     const res = await fetch(`${API_URL}/products/`, {
       method: "POST",
@@ -79,14 +79,11 @@ export const productsApi = {
   },
 
   async getBrands(): Promise<string[]> {
-    const products = await this.getAll()
-    const brands = Array.from(
-      new Set(products.map((p) => p.brand).filter((b): b is string => Boolean(b)))
-    )
-    return brands.sort()
-  },
+  const res = await fetch(`${API_URL}/products/brands`)
+  if (!res.ok) throw new Error("Error al obtener marcas")
+  return res.json()
+},
 }
-
 
 // ----------- CATEGORIES -----------
 export const categoriesApi = {
@@ -133,9 +130,34 @@ export const categoriesApi = {
 }
 
 // ----------- ORDERS -----------
+// Soporta filtros avanzados:
+//  - search: texto libre (nro orden, usuario, email)
+//  - status: estado (pending, paid, ...)
+//  - payment_method: método de pago
+//  - date_from, date_to: YYYY-MM-DD (filtra por fecha de orden)
 export const ordersApi = {
-  async getAll(): Promise<Order[]> {
-    const res = await fetch(`${API_URL}/orders/`, { headers: getAuthHeaders() })
+  /**
+   * getAll admite estos filtros (si tu backend lo soporta como query-params):
+   *  - search: texto para buscar por nro de orden, usuario o email
+   *  - status: estado de la orden (pending, paid, etc)
+   *  - payment_method: método de pago
+   *  - date_from: fecha inicio (YYYY-MM-DD)
+   *  - date_to: fecha fin (YYYY-MM-DD)
+   * Puedes combinarlos libremente.
+   */
+  async getAll(filters?: {
+    search?: string
+    status?: string
+    payment_method?: string
+    date_from?: string
+    date_to?: string
+  }): Promise<Order[]> {
+    let url = `${API_URL}/orders/`
+    if (filters && Object.keys(filters).length > 0) {
+      const qs = buildQuery(filters)
+      if (qs) url += `?${qs}`
+    }
+    const res = await fetch(url, { headers: getAuthHeaders() })
     if (!res.ok) throw new Error("Error al obtener órdenes")
     return res.json()
   },
@@ -381,12 +403,12 @@ export const invoicesApi = {
     if (!res.ok) throw new Error("Error al obtener facturas")
     return res.json()
   },
-async getByOrderId(order_id: string): Promise<Invoice | null> {
-  const res = await fetch(`${API_URL}/invoices/?order_id=${order_id}`, { headers: getAuthHeaders() });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return Array.isArray(data) && data.length > 0 ? data[0] : null;
-},
+  async getByOrderId(order_id: string): Promise<Invoice | null> {
+    const res = await fetch(`${API_URL}/invoices/?order_id=${order_id}`, { headers: getAuthHeaders() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  },
   async getById(id: string): Promise<Invoice | null> {
     const res = await fetch(`${API_URL}/invoices/${id}`, { headers: getAuthHeaders() })
     if (res.status === 404) return null
