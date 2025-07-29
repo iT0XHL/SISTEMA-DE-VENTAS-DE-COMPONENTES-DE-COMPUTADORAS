@@ -1,7 +1,9 @@
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.enums import TA_LEFT
 from io import BytesIO
 from datetime import datetime
 import pytz
@@ -48,7 +50,7 @@ def generar_boleta_pdf(data):
     c.setFillColor(blanco)
     c.drawCentredString(width-105, height-HEADER_HEIGHT+80, "BOLETA DE VENTA")
 
-    # --- Boleta Nº y Fecha (más abajo)
+    # --- Boleta Nº y Fecha
     block_y = height-HEADER_HEIGHT-65
     lima_now = datetime.now(pytz.timezone("America/Lima")).strftime("%Y-%m-%d %H:%M")
     c.setFillColor(gris_claro)
@@ -79,7 +81,7 @@ def generar_boleta_pdf(data):
         c.drawString(width/2 + 25, current_y + 16, f"Teléfono: {phone}")
     current_y -= 38
 
-    # --- Detalle productos
+    # --- Detalle de productos
     c.setFillColor(verde)
     c.rect(MARGIN_LEFT, current_y, width - 2*MARGIN_LEFT, 22, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 13)
@@ -87,34 +89,58 @@ def generar_boleta_pdf(data):
     c.drawString(MARGIN_LEFT + 12, current_y + 7, "DETALLE DE PRODUCTOS")
     current_y -= 30
 
-    # --- Tabla
-    table_data = [["Producto", "Cant.", "Precio Unit.", "Total"]]
+    # Estilo para texto largo
+    styles = getSampleStyleSheet()
+    style_left = ParagraphStyle('left', parent=styles['Normal'], fontName='Helvetica', fontSize=10, alignment=TA_LEFT)
+
+    # Cabecera de tabla
+    table_data = [
+        ["Código", "Producto", "Cantidad", "Precio Unit", "Total (s/IGV)"]
+    ]
+
+    subtotal = 0.0
     for item in data["items"]:
+        code = Paragraph(item.get("code", ""), style_left)
+        name = Paragraph(item.get("name", ""), style_left)
+        qty = int(item.get("quantity", 1))
+        price_con_igv = float(item.get("price", 0.0))
+        price_sin_igv = round(price_con_igv / 1.18, 2)
+        total_sin_igv = round(price_sin_igv * qty, 2)
+        subtotal += total_sin_igv
+
         table_data.append([
-            item["name"],
-            str(item["quantity"]),
-            f"S/{item['price']:.2f}",
-            f"S/{item['total']:.2f}",
+            code,
+            name,
+            str(qty),
+            f"S/{price_sin_igv:.2f}",
+            f"S/{total_sin_igv:.2f}",
         ])
 
+    # Estilo de tabla
+    col_widths = [90, 200, 50, 90, 90]  # Aumentamos ancho de "Código" y "Producto"
+    table = Table(table_data, colWidths=col_widths)
     style = TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), azul),
         ('TEXTCOLOR', (0, 0), (-1, 0), blanco),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 1), (1, -1), 'LEFT'),
         ('GRID', (0, 0), (-1, -1), 0.3, colors.lightgrey),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
     ])
-    table = Table(table_data, colWidths=[260, 55, 90, 90])
     table.setStyle(style)
     table.wrapOn(c, width, height)
 
-    table_y = current_y - len(table_data)*24
+    table_y = current_y - len(table_data) * 24
     table.drawOn(c, MARGIN_LEFT, table_y)
 
-    # --- Totales alineados y mejor centrado el TOTAL
+    # Totales
+    igv = round(subtotal * 0.18, 2)
+    total_final = round(subtotal + igv, 2)
+
     totales_y = table_y - 110
     box_x = width - 215
     rect_y = totales_y + 28
@@ -122,20 +148,17 @@ def generar_boleta_pdf(data):
 
     c.setFont("Helvetica", 12)
     c.setFillColor(gris_oscuro)
-    c.drawRightString(box_x + 185, totales_y + 98, f"Subtotal: S/{data['subtotal']:.2f}")
-    c.drawRightString(box_x + 185, totales_y + 78, f"IGV (18%): S/{data['tax']:.2f}")
+    c.drawRightString(box_x + 185, totales_y + 98, f"Subtotal: S/{subtotal:.2f}")
+    c.drawRightString(box_x + 185, totales_y + 78, f"IGV (18%): S/{igv:.2f}")
 
-    # Rectángulo verde (NO SE MUEVE)
+    # Rectángulo verde del total final
     c.setFillColor(verde)
     c.rect(box_x, rect_y, 180, rect_height, fill=1, stroke=0)
-
-    # Texto TOTAL más pequeño y más abajo, centrado
     c.setFont("Helvetica-Bold", 17)
     c.setFillColor(blanco)
-    # Centramos verticalmente con un pequeño "empuje" hacia abajo
-    c.drawCentredString(box_x + 90, rect_y + rect_height/2 + 4, f"TOTAL: S/{data['total']:.2f}")
+    c.drawCentredString(box_x + 90, rect_y + rect_height/2 + 4, f"TOTAL: S/{total_final:.2f}")
 
-    # --- Footer
+    # Footer
     c.setFont("Helvetica-Bold", 13)
     c.setFillColor(verde)
     c.drawCentredString(width/2, 70, "¡Gracias por tu compra!")

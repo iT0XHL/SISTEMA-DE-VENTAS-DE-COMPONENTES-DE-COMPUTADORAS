@@ -403,12 +403,14 @@ export const invoicesApi = {
     if (!res.ok) throw new Error("Error al obtener facturas")
     return res.json()
   },
+
   async getByOrderId(order_id: string): Promise<Invoice | null> {
     const res = await fetch(`${API_URL}/invoices/?order_id=${order_id}`, { headers: getAuthHeaders() });
     if (!res.ok) return null;
     const data = await res.json();
     return Array.isArray(data) && data.length > 0 ? data[0] : null;
   },
+
   async getById(id: string): Promise<Invoice | null> {
     const res = await fetch(`${API_URL}/invoices/${id}`, { headers: getAuthHeaders() })
     if (res.status === 404) return null
@@ -422,7 +424,13 @@ export const invoicesApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(invoice),
     })
-    if (!res.ok) throw new Error("Error al crear factura")
+
+    if (!res.ok) {
+      const error: any = new Error("Error al crear factura")
+      error.status = res.status
+      throw error
+    }
+
     return res.json()
   },
 
@@ -444,6 +452,7 @@ export const invoicesApi = {
     if (!res.ok) throw new Error("Error al eliminar factura")
   },
 }
+
 
 // ----------- ADMIN STATS (NUEVO) -----------
 export const statsApi = {

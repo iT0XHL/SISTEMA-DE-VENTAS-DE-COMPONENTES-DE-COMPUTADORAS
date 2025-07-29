@@ -37,6 +37,11 @@ export default function CartPage() {
     )
   }
 
+  // El IGV ya está incluido en el precio final de cada producto
+  // Desglosamos IGV solo para mostrar, pero el total NO lo suma de nuevo
+  const igv = total * 18 / 118  // Si el precio es precio final con IGV (incluido)
+  const subtotalSinIGV = total - igv
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Carrito de Compras</h1>
@@ -122,17 +127,17 @@ export default function CartPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>S/ {total.toFixed(2)}</span>
+                <span>Subtotal sin IGV:</span>
+                <span>S/ {subtotalSinIGV.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>IGV (18%):</span>
-                <span>S/ {(total * 0.18).toFixed(2)}</span>
+                <span>S/ {igv.toFixed(2)}</span>
               </div>
               <div className="border-t pt-4">
                 <div className="flex justify-between text-lg font-semibold">
-                  <span>Total:</span>
-                  <span>S/ {(total * 1.18).toFixed(2)}</span>
+                  <span>Total (con IGV):</span>
+                  <span>S/ {total.toFixed(2)}</span>
                 </div>
               </div>
 

@@ -375,49 +375,7 @@ def create_order(data):
         )
         db.session.add(order_item)
     db.session.commit()
-
-    # --- Generar la boleta automáticamente con la orden ---
-    from pdf_generator import generar_boleta_pdf
-    import uuid as uuid_mod
-    order = get_order_by_id(order.id)  # refresca para asegurar que trae los order_items
-    invoice_number = f"INV-{now_lima().strftime('%Y%m%d')}-{str(uuid_mod.uuid4())[:8]}"
-    items_invoice = []
-    subtotal = 0.0
-    for oi in order.order_items:
-        items_invoice.append({
-            "name": oi.product_name,
-            "quantity": oi.quantity,
-            "price": float(oi.unit_price),
-            "total": float(oi.total_price),
-        })
-        subtotal += float(oi.total_price)
-    tax = round(subtotal * 0.18, 2)
-    total = round(subtotal + tax, 2)
-    pdf_bytes = generar_boleta_pdf({
-        "invoiceNumber": invoice_number,
-        "date": now_lima().strftime('%Y-%m-%d %H:%M'),
-        "customerName": order.user.full_name,
-        "customerDni": "",  # pon el campo correcto si tienes
-        "customerEmail": order.user.email,
-        "customerPhone": order.shipping_address.get("phone", "") if order.shipping_address else "",
-        "items": items_invoice,
-        "subtotal": subtotal,
-        "tax": tax,
-        "total": total,
-    })
-    invoice = Invoice(
-        id=str(uuid_mod.uuid4()),
-        order_id=order.id,
-        invoice_number=invoice_number,
-        customer_name=order.user.full_name,
-        customer_dni="",  # pon el campo correcto si tienes
-        pdf_data=pdf_bytes,
-        created_at=now_lima(),
-    )
-    db.session.add(invoice)
-    db.session.commit()
-    # --- FIN creación automática de boleta ---
-
+    
     return order
 
 def update_order(order_id, data):

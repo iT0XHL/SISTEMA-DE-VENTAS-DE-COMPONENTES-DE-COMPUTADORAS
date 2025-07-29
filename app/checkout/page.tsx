@@ -13,9 +13,8 @@ import { ordersApi, invoicesApi, productsApi } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { CheckCircle } from "lucide-react"
-import type { OrderCreate, CartItem, Product } from "@/lib/types"
+import type { OrderCreate, Product } from "@/lib/types"
 
-// Diccionario para labels bonitos de métodos de pago
 const paymentLabels: Record<string, string> = {
   credit_card: "Tarjeta de Crédito",
   debit_card: "Tarjeta de Débito",
@@ -30,7 +29,6 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false)
   const [productNames, setProductNames] = useState<Record<string, string>>({})
 
-  // Redirección segura usando useEffect (Evita el bug del Router)
   useEffect(() => {
     if (!user) router.push("/login")
   }, [user, router])
@@ -39,7 +37,6 @@ export default function CheckoutPage() {
     if (user && items.length === 0) router.push("/cart")
   }, [items.length, user, router])
 
-  // Fetch product names
   useEffect(() => {
     async function fetchNames() {
       const map: Record<string, string> = {}
@@ -58,7 +55,11 @@ export default function CheckoutPage() {
     if (items.length > 0) fetchNames()
   }, [items])
 
-  // Datos del formulario (incluyendo cliente de la boleta)
+  // Calcula IGV y subtotal SOLO PARA DESGLOSE, el total YA incluye IGV
+  const igv = total * 18 / 118
+  const subtotalSinIGV = total - igv
+
+  // Incluye los campos de tarjeta aquí
   const [formData, setFormData] = useState({
     address: "",
     city: "",
@@ -68,6 +69,10 @@ export default function CheckoutPage() {
     notes: "",
     customerName: "",
     customerDni: "",
+    cardNumber: "",
+    cardHolder: "",
+    cardExpiry: "",
+    cardCvc: "",
   })
 
   const handleInputChange = (field: string, value: string) => {
@@ -75,63 +80,100 @@ export default function CheckoutPage() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    setLoading(true)
-    try {
-      const paidMethods = ["credit_card", "debit_card"]
-      const status = paidMethods.includes(formData.paymentMethod) ? "paid" : "pending"
+  e.preventDefault()
+  if (!user) return
 
-      // 1. Crear la orden principal incluyendo los items del carrito
-      const orderData: OrderCreate & { items: any[] } = {
-        user_id: user.id,
-        total_amount: total * 1.18,
-        status,
-        payment_method: formData.paymentMethod,
-        shipping_address: {
-          address: formData.address,
-          city: formData.city,
-          postalCode: formData.postalCode,
-          phone: formData.phone,
-          notes: formData.notes,
-        },
-        items: items.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.price,
-        })),
-      }
+  // Validación simulada para tarjetas
+  if (["credit_card", "debit_card"].includes(formData.paymentMethod)) {
+    const numberOk = formData.cardNumber.replace(/\s/g, "").length >= 15
+    const holderOk = !!formData.cardHolder.trim()
+    const expiryOk = /^\d{2}\/\d{2}$/.test(formData.cardExpiry)
+    const cvcOk = formData.cardCvc.length >= 3
 
-      const order = await ordersApi.create(orderData)
-
-      // 2. Crear la factura/boleta si lo necesitas (igual que antes)
-      await invoicesApi.create({
-        order_id: order.id,
-        invoice_number: "", // El backend lo puede autogenerar
-        customer_name: formData.customerName,
-        customer_dni: formData.customerDni,
-      })
-
+    if (!numberOk || !holderOk || !expiryOk || !cvcOk) {
       toast({
-        title: "¡Compra realizada con éxito!",
-        description: "Tu pedido ha sido procesado y guardado en tu historial.",
-      })
-
-      clearCart()
-      router.push("/orders")
-    } catch (error) {
-      console.error("Error processing order:", error)
-      toast({
-        title: "Error al procesar el pedido",
-        description: "Hubo un problema al procesar tu compra. Inténtalo de nuevo.",
+        title: "Datos de tarjeta incompletos",
+        description: "Completa correctamente todos los datos de tu tarjeta.",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
+      return
     }
   }
 
-  // Bloquea render si está redireccionando
+  setLoading(true)
+
+  try {
+    const paidMethods = ["credit_card", "debit_card"]
+    const status = paidMethods.includes(formData.paymentMethod) ? "paid" : "pending"
+
+    const orderData: OrderCreate & { items: any[] } = {
+      user_id: user.id,
+      total_amount: total,
+      status,
+      payment_method: formData.paymentMethod,
+      shipping_address: {
+        address: formData.address,
+        city: formData.city,
+        postalCode: formData.postalCode,
+        phone: formData.phone,
+        notes: formData.notes,
+      },
+      items: items.map((item) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+    }
+
+    const order = await ordersApi.create(orderData)
+
+    // 🔍 Verificar si ya existe una boleta antes de crearla
+    try {
+      const existingInvoice = await invoicesApi.getByOrderId(order.id)
+
+      if (!existingInvoice) {
+        await invoicesApi.create({
+          order_id: order.id,
+          invoice_number: "",
+          customer_name: formData.customerName,
+          customer_dni: formData.customerDni,
+        })
+      } else {
+        toast({
+          title: "Ya existe una boleta para este pedido",
+          description: "No se generó una nueva boleta porque ya existe una para esta orden.",
+        })
+      }
+    } catch (err: any) {
+      console.error("Error al verificar o crear boleta:", err)
+      toast({
+        title: "Error con la boleta",
+        description: "Ocurrió un error al procesar la boleta. Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
+
+    toast({
+      title: "¡Compra realizada con éxito!",
+      description: "Tu pedido ha sido procesado y guardado en tu historial.",
+    })
+
+    clearCart()
+    router.push("/orders")
+
+  } catch (error) {
+    console.error("Error processing order:", error)
+    toast({
+      title: "Error al procesar el pedido",
+      description: "Hubo un problema al procesar tu compra. Inténtalo de nuevo.",
+      variant: "destructive",
+    })
+  } finally {
+    setLoading(false)
+  }
+}
+
+
   if (!user || items.length === 0) return null
 
   return (
@@ -238,6 +280,93 @@ export default function CheckoutPage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Campos de tarjeta SOLO si corresponde */}
+                  {["credit_card", "debit_card"].includes(formData.paymentMethod) && (
+                    <div className="grid grid-cols-1 gap-4 mt-4">
+                      <div>
+                        <Label htmlFor="cardNumber" className="text-gray-700 font-medium">Número de Tarjeta</Label>
+                        <Input
+                          id="cardNumber"
+                          type="text"
+                          maxLength={19}
+                          inputMode="numeric"
+                          autoComplete="cc-number"
+                          placeholder="1234 5678 9012 3456"
+                          value={formData.cardNumber}
+                          onChange={e =>
+                            handleInputChange(
+                              "cardNumber",
+                              e.target.value
+                                .replace(/\D/g, "")
+                                .replace(/(.{4})/g, "$1 ")
+                                .trim()
+                                .slice(0, 19)
+                            )
+                          }
+                          required
+                          className="mt-2 border-2 border-blue-200 focus:border-blue-500 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="cardHolder" className="text-gray-700 font-medium">Nombre en la Tarjeta</Label>
+                        <Input
+                          id="cardHolder"
+                          type="text"
+                          autoComplete="cc-name"
+                          placeholder="Como figura en la tarjeta"
+                          value={formData.cardHolder}
+                          onChange={e => handleInputChange("cardHolder", e.target.value)}
+                          required
+                          className="mt-2 border-2 border-blue-200 focus:border-blue-500 rounded-lg"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="cardExpiry" className="text-gray-700 font-medium">Fecha de Expiración</Label>
+                          <Input
+                            id="cardExpiry"
+                            type="text"
+                            maxLength={5}
+                            autoComplete="cc-exp"
+                            placeholder="MM/AA"
+                            value={formData.cardExpiry}
+                            onChange={e =>
+                              handleInputChange(
+                                "cardExpiry",
+                                e.target.value
+                                  .replace(/[^\d/]/g, "")
+                                  .replace(/^(\d{2})(\d)/, "$1/$2")
+                                  .slice(0, 5)
+                              )
+                            }
+                            required
+                            className="mt-2 border-2 border-blue-200 focus:border-blue-500 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="cardCvc" className="text-gray-700 font-medium">CVC</Label>
+                          <Input
+                            id="cardCvc"
+                            type="password"
+                            maxLength={4}
+                            autoComplete="cc-csc"
+                            placeholder="123"
+                            value={formData.cardCvc}
+                            onChange={e =>
+                              handleInputChange(
+                                "cardCvc",
+                                e.target.value.replace(/\D/g, "").slice(0, 4)
+                              )
+                            }
+                            required
+                            className="mt-2 border-2 border-blue-200 focus:border-blue-500 rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <Label htmlFor="notes" className="text-gray-700 font-medium">Notas Adicionales (Opcional)</Label>
                     <Textarea
@@ -277,17 +406,17 @@ export default function CheckoutPage() {
                   </div>
                   <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-lg space-y-3">
                     <div className="flex justify-between text-gray-700">
-                      <span>Subtotal:</span>
-                      <span className="font-medium">S/ {total.toFixed(2)}</span>
+                      <span>Subtotal sin IGV:</span>
+                      <span className="font-medium">S/ {subtotalSinIGV.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-gray-700">
                       <span>IGV (18%):</span>
-                      <span className="font-medium">S/ {(total * 0.18).toFixed(2)}</span>
+                      <span className="font-medium">S/ {igv.toFixed(2)}</span>
                     </div>
                     <div className="border-t-2 border-blue-200 pt-3">
                       <div className="flex justify-between text-xl font-bold">
-                        <span className="text-gray-800">Total:</span>
-                        <span className="text-green-600">S/ {(total * 1.18).toFixed(2)}</span>
+                        <span className="text-gray-800">Total a pagar:</span>
+                        <span className="text-green-600">S/ {total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
